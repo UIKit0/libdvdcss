@@ -132,6 +132,12 @@
 #define mkdir(a, b) _mkdir(a)
 #endif
 
+#if defined(_WIN32_IE) && _WIN32_IE >= 0x401
+# define DVDCSS_CACHE_WIN32
+#else
+# include <basedir.h>
+#endif
+
 /**
  * \brief Symbol for version checks.
  *
@@ -160,12 +166,12 @@ char * dvdcss_interface_2 = VERSION;
  */
 LIBDVDCSS_EXPORT dvdcss_t dvdcss_open ( char *psz_target )
 {
-    char psz_buffer[PATH_MAX];
+    char psz_cache[PATH_MAX];
+    char psz_home[PATH_MAX];
     int i_ret;
 
     char *psz_method = getenv( "DVDCSS_METHOD" );
     char *psz_verbose = getenv( "DVDCSS_VERBOSE" );
-    char *psz_cache = getenv( "DVDCSS_CACHE" );
 #ifdef DVDCSS_RAW_OPEN
     char *psz_raw_device = getenv( "DVDCSS_RAW_DEVICE" );
 #endif
@@ -233,20 +239,15 @@ LIBDVDCSS_EXPORT dvdcss_t dvdcss_open ( char *psz_target )
         }
     }
 
-    /*
-     *  If DVDCSS_CACHE was not set, try to guess a default value
-     */
-    if( psz_cache == NULL || psz_cache[0] == '\0' )
+#if DVDCSS_CACHE_WIN32
     {
-#if defined(_WIN32_IE) && _WIN32_IE >= 0x401
-        typedef HRESULT( WINAPI *SHGETFOLDERPATH )
+	 typedef HRESULT( WINAPI *SHGETFOLDERPATH )
                        ( HWND, int, HANDLE, DWORD, LPTSTR );
 
 #   define CSIDL_FLAG_CREATE 0x8000
 #   define CSIDL_APPDATA 0x1A
 #   define SHGFP_TYPE_CURRENT 0
 
-        char psz_home[MAX_PATH];
         HINSTANCE p_dll;
         SHGETFOLDERPATH p_getpath;
 
@@ -275,78 +276,27 @@ LIBDVDCSS_EXPORT dvdcss_t dvdcss_open ( char *psz_target )
 
         /* Cache our keys in
          * C:\Documents and Settings\$USER\Application Data\dvdcss\ */
-        if( *psz_home )
-        {
-            snprintf( psz_buffer, PATH_MAX, "%s/dvdcss", psz_home );
-            psz_buffer[PATH_MAX-1] = '\0';
-            psz_cache = psz_buffer;
-        }
-#else
-        char *psz_home = NULL;
-#   ifdef HAVE_PWD_H
-        struct passwd *p_pwd;
-
-        /* Try looking in password file for home dir. */
-        p_pwd = getpwuid(getuid());
-        if( p_pwd )
-        {
-            psz_home = p_pwd->pw_dir;
-        }
-#   endif
-
-        if( psz_home == NULL )
-        {
-            psz_home = getenv( "HOME" );
-        }
-        if( psz_home == NULL )
-        {
-            psz_home = getenv( "USERPROFILE" );
-        }
-
-        /* Cache our keys in ${HOME}/.dvdcss/ */
-        if( psz_home )
-        {
-            int home_pos = 0;
-
-#ifdef __OS2__
-            if( *psz_home == '/' || *psz_home == '\\')
-            {
-                char *psz_unixroot = getenv("UNIXROOT");
-
-                if( psz_unixroot &&
-                    psz_unixroot[0] &&
-                    psz_unixroot[1] == ':'  &&
-                    psz_unixroot[2] == '\0')
-                {
-                    strcpy( psz_buffer, psz_unixroot );
-                    home_pos = 2;
-                }
-            }
-#endif
-            snprintf( psz_buffer + home_pos, PATH_MAX - home_pos,
-                      "%s/.dvdcss", psz_home );
-            psz_buffer[PATH_MAX-1] = '\0';
-            psz_cache = psz_buffer;
-        }
-#endif
     }
-
-    /*
-     *  Find cache dir from the DVDCSS_CACHE environment variable
-     */
-    if( psz_cache != NULL )
+#else
     {
-        if( psz_cache[0] == '\0' || !strcmp( psz_cache, "off" ) )
-        {
-            psz_cache = NULL;
-        }
-        /* Check that we can add the ID directory and the block filename */
-        else if( strlen( psz_cache ) + 1 + 32 + 1 + (KEY_SIZE * 2) + 10 + 1
-                  > PATH_MAX )
-        {
-            print_error( dvdcss, "cache directory name is too long" );
-            psz_cache = NULL;
-        }
+	static xdgHandle xdg;
+	xdgInitHandle(&xdg);
+	strncpy(psz_home, xdgCacheHome(&xdg), sizeof(psz_home)-1);
+	xdgWipeHandle(&xdg);
+    }
+#endif
+
+    if( *psz_home )
+    {
+	/* Check that we can add the ID directory and the block filename */
+	if( strlen( psz_home ) + strlen("/dvdcss") + 1 + 32 + 1 + (KEY_SIZE * 2) + 10 + 1
+	    > PATH_MAX )
+	{
+	    print_error( dvdcss, "cache directory name is too long" );
+	} else {
+	    snprintf( psz_cache, PATH_MAX, "%s/dvdcss", psz_home );
+	    psz_cache[PATH_MAX-1] = '\0';
+	}
     }
 
     /*
@@ -401,28 +351,8 @@ LIBDVDCSS_EXPORT dvdcss_t dvdcss_open ( char *psz_target )
         }
     }
 
-    /* If the cache is enabled, write the cache directory tag */
-    if( psz_cache )
-    {
-        static const char psz_tag[] =
-            "Signature: 8a477f597d28d172789f06886806bc55\r\n"
-            "# This file is a cache directory tag created by libdvdcss.\r\n"
-            "# For information about cache directory tags, see:\r\n"
-            "#   http://www.brynosaurus.com/cachedir/\r\n";
-        char psz_tagfile[PATH_MAX + 1 + 12 + 1];
-        int i_fd;
-
-        sprintf( psz_tagfile, "%s/CACHEDIR.TAG", psz_cache );
-        i_fd = open( psz_tagfile, O_RDWR|O_CREAT, 0644 );
-        if( i_fd >= 0 )
-        {
-            write( i_fd, psz_tag, strlen(psz_tag) );
-            close( i_fd );
-        }
-    }
-
     /* If the cache is enabled, extract a unique disc ID */
-    if( psz_cache )
+    if( *psz_cache )
     {
         uint8_t p_sector[DVDCSS_BLOCK_SIZE];
         char psz_key[1 + KEY_SIZE * 2 + 1];

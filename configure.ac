@@ -210,6 +210,8 @@ AC_CHECK_HEADERS(sys/ioctl.h,[
                 Define if FreeBSD-like dvd_struct is defined.)
     fi
   fi
+
+  PKG_CHECK_MODULES([XDG], [libxdg-basedir])
 ])
 
 CC_CHECK_CFLAGS_APPEND([-Wall -Wsign-compare])

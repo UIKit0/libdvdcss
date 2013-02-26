@@ -29,7 +29,8 @@ libdvdcss_la_SOURCES = \
 	src/common.h
 
 libdvdcss_la_LDFLAGS = -version-info $(DVDCSS_LTVERSION) $(DVDCSS_LDFLAGS)
-libdvdcss_la_LIBADD =
+libdvdcss_la_CFLAGS = $(XDG_CFLAGS)
+libdvdcss_la_LIBADD = $(XDG_LIBS)
 
 if !SYS_MSVC
 libdvdcss_la_LDFLAGS += = -no-undefined
