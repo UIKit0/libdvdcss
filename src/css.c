@@ -211,26 +211,13 @@ int _dvdcss_title ( dvdcss_t dvdcss, int i_block )
     if( dvdcss->psz_cachefile[0] )
     {
         /* XXX: be careful, we use sprintf and not snprintf */
-        sprintf( dvdcss->psz_block, "%.10x", i_block );
+        sprintf( dvdcss->psz_block, "%.10x.bin", i_block );
         i_fd = open( dvdcss->psz_cachefile, O_RDONLY );
         b_cache = 1;
 
         if( i_fd >= 0 )
         {
-            char psz_key[KEY_SIZE * 3];
-            unsigned int k0, k1, k2, k3, k4;
-
-            psz_key[KEY_SIZE * 3 - 1] = '\0';
-
-            if( read( i_fd, psz_key, KEY_SIZE * 3 - 1 ) == KEY_SIZE * 3 - 1
-                 && sscanf( psz_key, "%x:%x:%x:%x:%x",
-                            &k0, &k1, &k2, &k3, &k4 ) == 5 )
-            {
-                p_title_key[0] = k0;
-                p_title_key[1] = k1;
-                p_title_key[2] = k2;
-                p_title_key[3] = k3;
-                p_title_key[4] = k4;
+            if ( read( i_fd, p_title_key, KEY_SIZE ) == KEY_SIZE ) {
                 PrintKey( dvdcss, "title key found in cache ", p_title_key );
 
                 /* Don't try to save it again */
@@ -266,13 +253,7 @@ int _dvdcss_title ( dvdcss_t dvdcss, int i_block )
         i_fd = open( dvdcss->psz_cachefile, O_RDWR|O_CREAT, 0644 );
         if( i_fd >= 0 )
         {
-            char psz_key[KEY_SIZE * 3 + 2];
-
-            sprintf( psz_key, "%02x:%02x:%02x:%02x:%02x\r\n",
-                              p_title_key[0], p_title_key[1], p_title_key[2],
-                              p_title_key[3], p_title_key[4] );
-
-            write( i_fd, psz_key, KEY_SIZE * 3 + 1 );
+            write( i_fd, p_title_key, KEY_SIZE );
             close( i_fd );
         }
     }
