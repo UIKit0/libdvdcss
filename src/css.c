@@ -212,7 +212,7 @@ int _dvdcss_title ( dvdcss_t dvdcss, int i_block )
     {
         /* XXX: be careful, we use sprintf and not snprintf */
         sprintf( dvdcss->psz_block, "%.10x.bin", i_block );
-        i_fd = open( dvdcss->psz_cachefile, O_RDONLY );
+        i_fd = open( dvdcss->psz_cachefile, O_RDONLY|O_BINARY );
         b_cache = 1;
 
         if( i_fd >= 0 )
@@ -250,7 +250,7 @@ int _dvdcss_title ( dvdcss_t dvdcss, int i_block )
     /* Key is valid, we store it on disk. */
     if( dvdcss->psz_cachefile[0] && b_cache )
     {
-        i_fd = open( dvdcss->psz_cachefile, O_RDWR|O_CREAT, 0644 );
+        i_fd = open( dvdcss->psz_cachefile, O_RDWR|O_CREAT|O_BINARY, 0644 );
         if( i_fd >= 0 )
         {
             write( i_fd, p_title_key, KEY_SIZE );
